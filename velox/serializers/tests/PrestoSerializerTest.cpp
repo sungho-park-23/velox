@@ -52,8 +52,8 @@ class PrestoSerializerTest : public ::testing::Test {
       rows[i] = IndexRange{i, 1};
     }
 
-    sanityCheckEstimateSerializedSize(
-        rowVector, folly::Range(rows.data(), numRows));
+//    sanityCheckEstimateSerializedSize(
+//        rowVector, folly::Range(rows.data(), numRows));
 
     auto arena =
         std::make_unique<StreamArena>(memory::MappedMemory::getInstance());
@@ -116,13 +116,41 @@ TEST_F(PrestoSerializerTest, basic) {
   vector_size_t numRows = 1'000;
   auto rowVector = makeTestVector(numRows);
 
+  auto start = std::chrono::high_resolution_clock::now();
+
   std::ostringstream out;
   serialize(rowVector, &out);
 
   auto rowType = std::dynamic_pointer_cast<const RowType>(rowVector->type());
   auto deserialized = deserialize(rowType, out.str());
+
+  auto stop = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+  std::cout << duration.count() << std::endl;
+
   assertEqualVectors(deserialized, rowVector);
 }
+
+TEST_F(PrestoSerializerTest, basicString) {
+  vector_size_t numRows = 1'000;
+
+  auto a = vectorMaker_->flatVector<StringView>(numRows, [](vector_size_t row) {
+    return "{\"a\": \"12.3\", \"b\": \"12.34\"}";
+  });
+
+  std::vector<VectorPtr> childVectors = {a};
+
+  auto rowVector = vectorMaker_->rowVector(childVectors);
+
+
+  std::ostringstream out;
+  serialize(rowVector, &out);
+
+
+  auto rowType = std::dynamic_pointer_cast<const RowType>(rowVector->type());
+  auto deserialized = deserialize(rowType, out.str());
+  assertEqualVectors(deserialized, rowVector);
+}	
 
 /// Test serialization of a dictionary vector that adds nulls to the base
 /// vector.
